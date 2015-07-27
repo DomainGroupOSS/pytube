@@ -210,6 +210,7 @@ class YouTube(object):
 
     @staticmethod
     def decode_video_info(response):
+        json_data = None
         if response:
             content = response.read().decode("utf-8")
             try:
@@ -226,11 +227,11 @@ class YouTube(object):
                     raise YouTubeError("Cannot get JSON from HTML")
 
                 index = i + 1
-                return json.loads(player_conf[:index])
+                json_data = json.loads(player_conf[:index])
             except Exception as e:
                 raise YouTubeError("Cannot decode JSON: {0}".format(e))
 
-        return None
+        return json_data
 
     @staticmethod
     def _parse_stream_map(text):
