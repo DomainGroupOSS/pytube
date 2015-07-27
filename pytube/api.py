@@ -212,7 +212,7 @@ class YouTube(object):
     def decode_video_info(response):
         json_data = None
         if response:
-            content = response.read().decode("utf-8")
+            content = response.decode("utf-8")
             try:
                 player_conf = content[18 + content.find("ytplayer.config = "):]
                 bracket_count = 0
@@ -295,7 +295,7 @@ class YouTube(object):
         response = urlopen(self.url)
 
         if response:
-            data = self._decode_video_info(response)
+            data = self.decode_video_info(response.read())
             self.json_data = data
 
     def _cipher(self, s, url):
