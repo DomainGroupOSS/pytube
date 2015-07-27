@@ -195,7 +195,32 @@ class YouTube(object):
             # Nope, let's keep diggin'
             return self._fetch(path, data)
 
-    def _parse_stream_map(self, text):
+    @staticmethod
+    def _decode_video_info(response):
+        if response:
+            content = response.read().decode("utf-8")
+            try:
+                player_conf = content[18 + content.find("ytplayer.config = "):]
+                bracket_count = 0
+                for i, char in enumerate(player_conf):
+                    if char == "{":
+                        bracket_count += 1
+                    elif char == "}":
+                        bracket_count -= 1
+                        if bracket_count == 0:
+                            break
+                else:
+                    raise YouTubeError("Cannot get JSON from HTML")
+
+                index = i + 1
+                return json.loads(player_conf[:index])
+            except Exception as e:
+                raise YouTubeError("Cannot decode JSON: {0}".format(e))
+
+        return None
+
+    @staticmethod
+    def _parse_stream_map(text):
         """Python's `parse_qs` can't properly decode the stream map
         containing video data so we use this instead.
         """
@@ -220,58 +245,44 @@ class YouTube(object):
 
         return videoinfo
 
+    def _process_video_info(self, data):
+        self.title = None
+        self.videos = []
+
+        stream_map = self._parse_stream_map(data["args"]["url_encoded_fmt_stream_map"])
+
+        self.title = data["args"]["title"]
+        js_url = "http:" + data["assets"]["js"]
+        video_urls = stream_map["url"]
+
+        for i, url in enumerate(video_urls):
+            try:
+                fmt, fmt_data = self._extract_fmt(url)
+            except (TypeError, KeyError):
+                continue
+
+            # If the signature must be ciphered...
+            if "signature=" not in url:
+                signature = self._cipher(stream_map["s"][i], js_url)
+                url = "%s&signature=%s" % (url, signature)
+
+            self.videos.append(Video(url, self.filename, **fmt_data))
+            self._fmt_values.append(fmt)
+        self.videos.sort()
+
     def _get_video_info(self):
-        """This is responsable for executing the request, extracting the
+        """This is responsible for executing the request, extracting the
         necessary details, and populating the different video resolutions and
         formats into a list.
         """
-        # TODO: split up into smaller functions. Cyclomatic complexity => 15
         self.title = None
         self.videos = []
 
         response = urlopen(self.url)
 
         if response:
-            content = response.read().decode("utf-8")
-            try:
-                player_conf = content[18 + content.find("ytplayer.config = "):]
-                bracket_count = 0
-                for i, char in enumerate(player_conf):
-                    if char == "{":
-                        bracket_count += 1
-                    elif char == "}":
-                        bracket_count -= 1
-                        if bracket_count == 0:
-                            break
-                else:
-                    raise YouTubeError("Cannot get JSON from HTML")
-
-                index = i + 1
-                data = json.loads(player_conf[:index])
-            except Exception as e:
-                raise YouTubeError("Cannot decode JSON: {0}".format(e))
-
-            stream_map = self._parse_stream_map(
-                data["args"]["url_encoded_fmt_stream_map"])
-
-            self.title = data["args"]["title"]
-            js_url = "http:" + data["assets"]["js"]
-            video_urls = stream_map["url"]
-
-            for i, url in enumerate(video_urls):
-                try:
-                    fmt, fmt_data = self._extract_fmt(url)
-                except (TypeError, KeyError):
-                    continue
-
-                # If the signature must be ciphered...
-                if "signature=" not in url:
-                    signature = self._cipher(stream_map["s"][i], js_url)
-                    url = "%s&signature=%s" % (url, signature)
-
-                self.videos.append(Video(url, self.filename, **fmt_data))
-                self._fmt_values.append(fmt)
-            self.videos.sort()
+            data = self._decode_video_info(response)
+            self._process_video_info(data)
 
     def _cipher(self, s, url):
         """Get the signature using the cipher
