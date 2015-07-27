@@ -16,8 +16,6 @@ except ImportError:
 import re
 import json
 
-YT_BASE_URL = 'http://www.youtube.com/get_video_info'
-
 # YouTube quality and codecs id map.
 # source: http://en.wikipedia.org/wiki/YouTube#Quality_and_codecs
 YT_ENCODING = {
@@ -70,6 +68,7 @@ class YouTube(object):
     _filename = None
     _fmt_values = []
     _video_url = None
+    _json_data = None
     _js_code = False
     _precompiled = False
     title = None
@@ -93,6 +92,20 @@ class YouTube(object):
         self._filename = None
         # Get the video details.
         self._get_video_info()
+
+    @property
+    def json_data(self):
+        """Exposes the video url.
+        """
+        return self._json_data
+
+    @json_data.setter
+    def json_data(self, json_data):
+        """ Defines the URL of the YouTube video.
+        """
+        # Get the video details.
+        self._json_data = json_data
+        self._process_video_info(json_data)
 
     @property
     def filename(self):
@@ -196,7 +209,7 @@ class YouTube(object):
             return self._fetch(path, data)
 
     @staticmethod
-    def _decode_video_info(response):
+    def decode_video_info(response):
         if response:
             content = response.read().decode("utf-8")
             try:
@@ -282,7 +295,7 @@ class YouTube(object):
 
         if response:
             data = self._decode_video_info(response)
-            self._process_video_info(data)
+            self.json_data = data
 
     def _cipher(self, s, url):
         """Get the signature using the cipher
